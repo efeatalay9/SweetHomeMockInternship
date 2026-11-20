@@ -278,8 +278,16 @@ public class HomePrintableComponent extends JComponent implements Printable {
         if (homeName == null) {
           homeName = "";
         }
-        String levelName = "";
-        if (this.home.getSelectedLevel() != null) {
+        String levelName = this.home.getLevels().isEmpty() ? "" : "All levels";
+        if (homePrint.isPlanPrinted() && !this.home.getLevels().isEmpty()) {
+          int levelPage = page - this.furniturePageCount;
+          for (Level level : this.home.getLevels()) {
+            if (level.isViewable() && levelPage-- == 0) {
+              levelName = level.getName();
+              break;
+            }
+          }
+        } else if (this.home.getSelectedLevel() != null) {
           levelName = this.home.getSelectedLevel().getName();
         }
         String homePresentationName = this.controller.getContentManager().getPresentationName(
@@ -345,31 +353,25 @@ public class HomePrintableComponent extends JComponent implements Printable {
     View furnitureView = this.controller.getFurnitureController().getView();
     if (furnitureView != null 
         && (homePrint == null || homePrint.isFurniturePrinted())) {
-      FurnitureTable furnitureTable = null;
-      final FurnitureTable.FurnitureFilter furnitureFilter;
-      if (furnitureView instanceof FurnitureTable
-          && (homePrint == null
-              || homePrint.isPlanPrinted()
-              || homePrint.isView3DPrinted())) {
-        final Level selectedLevel = home.getSelectedLevel();
-        furnitureTable = (FurnitureTable)furnitureView;
-        furnitureFilter = furnitureTable.getFurnitureFilter();
-        furnitureTable.setFurnitureFilter(new FurnitureTable.FurnitureFilter() {
-            public boolean include(Home home, HomePieceOfFurniture piece) {
-              // Print only furniture at selected level when the plan or the 3D view is printed
-              return (furnitureFilter == null || furnitureFilter.include(home, piece))
-                  && piece.isAtLevel(selectedLevel)
-                  && (piece.getLevel() == null || piece.getLevel().isViewable());
-            }
-          });
-      } else {
-        furnitureFilter = null;
-      }
-      // Try to print next furniture view page      
-      pageExists = ((Printable)furnitureView).print(g2D, pageFormat, page);
-      if (furnitureTable != null) {
-        // Restore previous filter
-        ((FurnitureTable)furnitureView).setFurnitureFilter(furnitureFilter);
+      FurnitureTable furnitureTable = furnitureView instanceof FurnitureTable
+          ? (FurnitureTable)furnitureView : null;
+      final FurnitureTable.FurnitureFilter furnitureFilter = furnitureTable != null
+          ? furnitureTable.getFurnitureFilter() : null;
+      try {
+        if (furnitureTable != null) {
+          furnitureTable.setFurnitureFilter(new FurnitureTable.FurnitureFilter() {
+              public boolean include(Home home, HomePieceOfFurniture piece) {
+                // Include furniture on every viewable level, regardless of the selected level.
+                return (furnitureFilter == null || furnitureFilter.include(home, piece))
+                    && (piece.getLevel() == null || piece.getLevel().isViewable());
+              }
+            });
+        }
+        pageExists = ((Printable)furnitureView).print(g2D, pageFormat, page);
+      } finally {
+        if (furnitureTable != null) {
+          furnitureTable.setFurnitureFilter(furnitureFilter);
+        }
       }
       if (pageExists == PAGE_EXISTS
           && !this.printablePages.contains(page)) {
